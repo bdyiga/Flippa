@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #333;
+        }
+
+        .game-container {
+            max-width: 600px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            text-align: center;
+            color: #1e3c72;
+            margin-bottom: 20px;
+            font-size: 2rem;
+        }
+
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f0f2f5;
+            border-radius: 8px;
+        }
+
+        .score-display {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #1e3c72;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            aspect-ratio: 1;
+            perspective: 1000px;
+            cursor: pointer;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front,
+        .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-front {
+            background: #1e3c72;
+            color: white;
+        }
+
+        .card-back {
+            background: #4CAF50;
+            color: white;
+            transform: rotateY(180deg);
+        }
+
+        .card.matched .card-back {
+            background: #2E7D32;
+        }
+
+        button {
+            background: #1e3c72;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #2a5298;
+        }
+
+        .win-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            z-index: 99;
+        }
+
+        .overlay.active {
+            display: block;
+        }
+
+        @media (max-width: 500px) {
+            .grid {
+                gap: 5px;
+            }
+
+            .card-front,
+            .card-back {
+                font-size: 1.2rem;
+            }
+
+            .info-panel {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Memory Game</h1>
+        <div class="info-panel">
+            <div class="score-display">Score: <span id="score">0</span></div>
+            <button onclick="restartGame()">Restart Game</button>
+            <div class="score-display">Time: <span id="time">0</span>s</div>
+        </div>
+        <div class="grid" id="grid"></div>
+    </div>
+    <div class="overlay" id="overlay"></div>
+    <script>
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let score = 0;
+        let timeElapsed = 0;
+        let timer;
+        const totalPairs = 8;
+
+        function createCard(value) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="card-inner">
+                    <div class="card-front">?</div>
+                    <div class="card-back">${value}</div>
+                </div>
+            `;
+            card.dataset.value = value;
+            card.addEventListener('click', flipCard);
+            return card;
+        }
+
+        function initializeGame() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            cards = [];
+            flippedCards = [];
+            matchedPairs = 0;
+            score = 0;
+            timeElapsed = 0;
+            updateScore();
+            updateTime();
+
+            // Create pairs of cards
+            const values = Array.from({length: totalPairs}, (_, i) => i + 1);
+            const pairs = [...values, ...values];
+            pairs.sort(() => Math.random() - 0.5);
+
+            pairs.forEach(value => {
+                const card = createCard(value);
+                cards.push(card);
+                grid.appendChild(card);
+            });
+
+            // Start timer
+            if (timer) clearInterval(timer);
+            timer = setInterval(() => {
+                timeElapsed++;
+                updateTime();
+            }, 1000);
+        }
+
+        function flipCard() {
+            if (flippedCards.length === 2) return;
+            if (flippedCards.includes(this)) return;
+            if (this.classList.contains('matched')) return;
+
+            this.classList.add('flipped');
+            flippedCards.push(this);
+
+            if (flippedCards.length === 2) {
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            const [card1, card2] = flippedCards;
+            const match = card1.dataset.value === card2.dataset.value;
+
+            if (match) {
+                card1.classList.add('matched');
+                card2.classList.add('matched');
+                matchedPairs++;
+                score += 10;
+                flippedCards = [];
+                
+                if (matchedPairs === totalPairs) {
+                    showWinMessage();
+                }
+            } else {
+                score = Math.max(0, score - 1);
+                setTimeout(() => {
+                    card1.classList.remove('flipped');
+                    card2.classList.remove('flipped');
+                    flippedCards = [];
+                }, 1000);
+            }
+
+            updateScore();
+        }
+
+        function showWinMessage() {
+            clearInterval(timer);
+            const overlay = document.getElementById('overlay');
+            overlay.classList.add('active');
+
+            const winMessage = document.createElement('div');
+            winMessage.className = 'win-message';
+            winMessage.innerHTML = `
+                <h2>Congratulations!</h2>
+                <p>You won with a score of ${score}!</p>
+                <p>Time: ${timeElapsed} seconds</p>
+                <button onclick="restartGame()">Play Again</button>
+            `;
+            document.body.appendChild(winMessage);
+        }
+
+        function restartGame() {
+            const winMessage = document.querySelector('.win-message');
+            if (winMessage) winMessage.remove();
+            
+            const overlay = document.getElementById('overlay');
+            overlay.classList.remove('active');
+            
+            initializeGame();
+        }
+
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+        }
+
+        function updateTime() {
+            document.getElementById('time').textContent = timeElapsed;
+        }
+
+        // Start the game when the page loads
+        window.onload = initializeGame;
+    </script>
+</body>
+</html>
